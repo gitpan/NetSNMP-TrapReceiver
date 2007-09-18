@@ -18,9 +18,9 @@ typedef struct trapd_cb_data_s {
 } trapd_cb_data;
 
 typedef struct netsnmp_oid_s {
-    unsigned int        *name;
-    unsigned int         len;
-    unsigned int         namebuf[ MAX_OID_LEN ];
+    oid                 *name;
+    size_t               len;
+    oid                  namebuf[ MAX_OID_LEN ];
 } netsnmp_oid;
 
 int   perl_trapd_handler( netsnmp_pdu           *pdu,
@@ -188,7 +188,7 @@ int   perl_trapd_handler( netsnmp_pdu           *pdu,
         /* reference to code */
         perl_call_sv(SvRV(pcallback), G_DISCARD);
     } else {
-        snmp_log(LOG_ERR, " tried to call a perl function but failed to understand its type: (ref = %x, svrok: %d, SVTYPE: %d)\n", pcallback, SvROK(pcallback), SvTYPE(pcallback));
+        snmp_log(LOG_ERR, " tried to call a perl function but failed to understand its type: (ref = %x, svrok: %lu, SVTYPE: %lu)\n", (uintptr_t)pcallback, SvROK(pcallback), SvTYPE(pcallback));
     }
 
 #ifdef DUMPIT

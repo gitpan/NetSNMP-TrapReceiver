@@ -1,11 +1,11 @@
 # http://module-build.sourceforge.net/META-spec.html
 #XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
 name:         NetSNMP-TrapReceiver
-version:      5.0301
+version:      5.0401
 version_from: TrapReceiver.pm
 installdirs:  site
 requires:
-    NetSNMP::OID:                  5.1
+    NetSNMP::OID:                  5.02
 
 distribution_type: module
 generated_by: ExtUtils::MakeMaker version 6.30

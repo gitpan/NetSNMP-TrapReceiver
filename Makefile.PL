@@ -43,7 +43,7 @@ sub InitMakeParams {
 		  'NAME'		=> 'NetSNMP::TrapReceiver',
 		  'VERSION_FROM'	=> 'TrapReceiver.pm', # finds $VERSION
 		  'XSPROTOARG'          => '-prototypes',
-		  'PREREQ_PM'		=> { NetSNMP::OID => 5.1 },
+		  'PREREQ_PM'		=> { NetSNMP::OID => 5.02 },
 		  ($] >= 5.005 ? ## Add these new keywords supported since 5.005
 		   (ABSTRACT_FROM => 'TrapReceiver.pm',
 		    AUTHOR        =>
@@ -96,8 +96,8 @@ sub InitMakeParams {
 	  else
 	  {
 	    @LibDirs = ();
-	    @LibDirs[0] = prompt("The Net-SNMP library ($snmp_lib_file) could not be found.\nPlease enter the directory where it is located:");
-	    @LibDirs[0] =~ s/\\$//;
+	    $LibDirs[0] = prompt("The Net-SNMP library ($snmp_lib_file) could not be found.\nPlease enter the directory where it is located:");
+	    $LibDirs[0] =~ s/\\$//;
 	  }
 	}
 	$Params{LIBS} = "-L$LibDir -l$snmp_link_lib -l$agent_link_lib -l$helpers_link_lib -l$mibs_link_lib -l$trapd_link_lib ";
@@ -107,7 +107,9 @@ sub InitMakeParams {
     }
     else {
 	$opts = NetSNMPGetOpts();
-
+	$Params{'LDDLFLAGS'} = "$Config{lddlflags} " . `$opts->{'nsconfig'} --ldflags`;
+	$Params{'LIBS'} = '-lnetsnmptrapd -lnetsnmpagent -lnetsnmp';
+	chomp($Params{'LIBS'});
 	if (!$ENV{'NETSNMP_CCFLAGS'}) {
 	    $Params{'CCFLAGS'} = `$opts->{'nsconfig'} --cflags`;
 	    chomp($Params{'CCFLAGS'});
@@ -117,8 +119,11 @@ sub InitMakeParams {
 	}
 
 	if (lc($opts->{'insource'}) eq "true") {
+            $Params{'LIBS'} = "-L../../apps/.libs -L../../apps -L../../agent/.libs -L../../agent -L../../agent/helpers/.libs -L../../agent/helpers -L../../snmplib/.libs -L../../snmplib " . $Params{'LIBS'};
 	    $Params{'CCFLAGS'} = "-I../../include " . $Params{'CCFLAGS'};
-	}
+	} else {
+            $Params{'LIBS'} = `$opts->{'nsconfig'} --libdir` . " $Params{'LIBS'}";
+        }
 
 	$Params{'CCFLAGS'} =~ s/ -W(all|inline|strict-prototypes|write-strings|cast-qual|no-char-subscripts)//g; # ignore developer warnings
 	if ($Params{'CCFLAGS'} eq "") {
