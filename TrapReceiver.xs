@@ -39,6 +39,10 @@ int   perl_trapd_handler( netsnmp_pdu           *pdu,
     size_t ob_len = 0, oo_len = 0;
     AV *varbinds;
     HV *pduinfo;
+    int noValuesReturned;
+    int callingCFfailed = 0;
+    int result = NETSNMPTRAPD_HANDLER_OK;
+    netsnmp_pdu * v2pdu = NULL;
 
     dSP;
     ENTER;
@@ -48,8 +52,10 @@ int   perl_trapd_handler( netsnmp_pdu           *pdu,
         return 0;
 
     /* nuke v1 PDUs */
-    if (pdu->command == SNMP_MSG_TRAP)
-        pdu = convert_v1pdu_to_v2(pdu);
+    if (pdu->command == SNMP_MSG_TRAP) {
+        v2pdu = convert_v1pdu_to_v2(pdu);
+        pdu = v2pdu;
+    }
 
     cb_data = handler->handler_data;
     if (!cb_data || !cb_data->perl_cb)
@@ -182,13 +188,42 @@ int   perl_trapd_handler( netsnmp_pdu           *pdu,
 
     /* actually call the callback function */
     if (SvTYPE(pcallback) == SVt_PVCV) {
-        perl_call_sv(pcallback, G_DISCARD);
+        noValuesReturned = perl_call_sv(pcallback, G_SCALAR);
         /* XXX: it discards the results, which isn't right */
     } else if (SvROK(pcallback) && SvTYPE(SvRV(pcallback)) == SVt_PVCV) {
         /* reference to code */
-        perl_call_sv(SvRV(pcallback), G_DISCARD);
+        noValuesReturned = perl_call_sv(SvRV(pcallback), G_SCALAR);
     } else {
         snmp_log(LOG_ERR, " tried to call a perl function but failed to understand its type: (ref = %x, svrok: %lu, SVTYPE: %lu)\n", (uintptr_t)pcallback, SvROK(pcallback), SvTYPE(pcallback));
+	callingCFfailed = 1;
+    }
+
+    if (!callingCFfailed) {
+      SPAGAIN;
+
+      if ( noValuesReturned == 0 ) {
+        snmp_log(LOG_WARNING, " perl callback function %x did not return a scalar, assuming %d (NETSNMPTRAPD_HANDLER_OK)\n", (uintptr_t)pcallback, NETSNMPTRAPD_HANDLER_OK);
+      }
+      else {
+	SV *rv = POPs;
+
+	if (SvTYPE(rv) != SVt_IV) {
+	  snmp_log(LOG_WARNING, " perl callback function %x returned a scalar of type %d instead of an integer, assuming %d (NETSNMPTRAPD_HANDLER_OK)\n", (uintptr_t)pcallback, SvTYPE(rv), NETSNMPTRAPD_HANDLER_OK);
+	}
+	else {
+	  int rvi = (IV)SvIVx(rv);
+
+	  if ((NETSNMPTRAPD_HANDLER_OK <= rvi) && (rvi <= NETSNMPTRAPD_HANDLER_FINISH)) {
+	    snmp_log(LOG_DEBUG, " perl callback function %x returns %d\n", (uintptr_t)pcallback, rvi);
+	    result = rvi;
+	  }
+	  else {
+	    snmp_log(LOG_WARNING, " perl callback function %x returned an invalid scalar integer value (%d), assuming %d (NETSNMPTRAPD_HANDLER_OK)\n", (uintptr_t)pcallback, rvi, NETSNMPTRAPD_HANDLER_OK);
+	  }
+	}
+      }
+
+      PUTBACK;
     }
 
 #ifdef DUMPIT
@@ -210,14 +245,13 @@ int   perl_trapd_handler( netsnmp_pdu           *pdu,
 #endif    
     free(tmparray);
 
-    /* Not needed because of the G_DISCARD flag (I think) */
-    /* SPAGAIN; */
-    /* PUTBACK; */
-#ifndef __x86_64__
-    FREETMPS; /* FIXME: known to cause a segfault on x86-64 */
-#endif
+      if (v2pdu) {
+              snmp_free_pdu(v2pdu);
+      }
+
+    FREETMPS;
     LEAVE;
-    return NETSNMPTRAPD_HANDLER_OK;
+    return result;
 }
 
 MODULE = NetSNMP::TrapReceiver		PACKAGE = NetSNMP::TrapReceiver		
